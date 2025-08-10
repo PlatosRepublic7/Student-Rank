@@ -1,4 +1,40 @@
+# Python virtual environment
 .venv/
+
+# IDE settings
 .vscode/
+
+# Python cache
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Results and output files (but keep test data in /data folder)
 /results/
+algorithm_statistics.csv
+test_executable.csv
+enhanced_stats_test.csv
+quick_analysis.csv
+thorough_analysis.csv
+large_scale_results.csv
+my_results.csv
+/*_results.csv
+/*_analysis.csv
+
+# PyInstaller build files
+build/
+dist/
+*.spec
+
+# Temporary files
+*.tmp
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Deployment package (optional - remove if you want to track it)
+deployment_package/

@@ -1,6 +1,9 @@
 # Student-Rank 🎓
 
-This project provides a set of Python scripts for ranking students into company groups based on their preferences. The main script, `ranker2.py`, implements several algorithms for this purpose.
+This project provides a set of Python scripts for ranking students into company groups based on their preferences. The main script, `ranker2.py`, implements several algorithms for this purpose and can run in two modes:
+
+1. **Trial Mode** (NEW): Generates synthetic data and runs statistical analysis across multiple trials
+2. **Legacy Mode**: Processes existing CSV files with student preference data
 
 -----
 
@@ -27,27 +30,94 @@ The required packages are:
 
 ## Usage
 
-The main script to run the ranking process is `ranker2.py`. It takes several command-line arguments to customize its behavior.
+### Trial Mode (Statistical Analysis)
 
-### Command-line Arguments:
+The primary way to use this program is in **Trial Mode**, which generates synthetic student ranking data and runs statistical comparisons of the three assignment algorithms.
 
-  * `--file`: **(Required)** The path to the input CSV file containing student preferences. The file must have a `.csv` extension.
-  * `--type`: **(Required)** An integer (0, 1, or 2) that determines the selection algorithm to be used:
+#### Command-line Arguments:
+
+  * `--trials`: **(Optional, default=1)** Number of trials to run (maximum: 1000). Each trial uses freshly generated synthetic data.
+  * `--students`: **(Optional, default=30)** Number of students per trial.
+  * `--companies`: **(Optional, default=10)** Number of companies per trial.
+  * `--algorithms`: **(Optional, default=all)** Which algorithms to test. Choose from:
+      * `0`: Fill First (ff)
+      * `1`: Rank First (rf) 
+      * `2`: Best First (bf)
+      * Can specify multiple: `--algorithms 0 2` for Fill First and Best First only
+  * `--output_file`: **(Optional, default="algorithm_statistics.csv")** Name of the output CSV file.
+  * `--suppress_terminal_output`: **(Optional)** Suppress detailed progress output during trials.
+  * `--progress_interval`: **(Optional, default=10)** Show progress every N trials.
+
+#### Examples:
+
+```bash
+# Run 100 trials comparing all three algorithms
+python ranker2.py --trials 100 --students 50 --companies 10
+
+# Compare only Fill First vs Best First algorithms across 500 trials
+python ranker2.py --trials 500 --algorithms 0 2 --output_file "ff_vs_bf_comparison.csv"
+
+# Large-scale analysis with 1000 trials and progress updates every 50 trials
+python ranker2.py --trials 1000 --students 100 --companies 15 --progress_interval 50
+```
+
+#### Output Format:
+
+The trial mode produces a CSV file where each row represents one trial, and columns contain statistical metrics for each algorithm:
+
+- `trial`: Trial number
+- `{algorithm}_mean_ranking`: Average ranking assigned to students (lower is better)
+- `{algorithm}_satisfaction_rate`: Percentage of students receiving ranks 1-3
+- `{algorithm}_group_size_variance`: Variance in group sizes (lower means more even distribution)
+- `{algorithm}_rank_{n}_pct`: Percentage of students receiving rank n
+
+Where `{algorithm}` is `ff` (Fill First), `rf` (Rank First), or `bf` (Best First).
+
+### Legacy Mode (Single File Processing)
+
+For backward compatibility, you can still process existing CSV files using legacy mode.
+
+#### Legacy Command-line Arguments:
+
+  * `--file`: **(Required for legacy mode)** The path to the input CSV file containing student preferences. The file must have a `.csv` extension.
+  * `--type`: **(Required for legacy mode)** An integer (0, 1, or 2) that determines the selection algorithm to be used:
       * `0`: Fill First (ff)
       * `1`: Rank First (rf)
       * `2`: Best First (bf)
   * `--students`: **(Optional)** The number of students to process from the input file. If not specified, all students in the file will be processed.
   * `--companies`: **(Optional, default=10)** The number of companies to rank and form groups for.
-  * `--output_path`: **(Optional)** The path where the output CSV file will be saved. If not provided, the file will be saved in the current directory.
-  * `--suppress_terminal_output`: **(Optional, default=False)** If set to `True`, it will suppress the detailed output in the terminal during execution.
+  * `--suppress_terminal_output`: **(Optional)** Suppress detailed terminal output during execution.
 
-### Example:
+#### Legacy Example:
 
 ```bash
 python ranker2.py --file data/form_test_data_cc.csv --type 1 --students 30
 ```
 
 This command will run the ranking algorithm on the first 30 students from `form_test_data_cc.csv` using the "Rank First" method and output the results to a file named `ranker2data_rf.csv`.
+
+-----
+
+## Algorithm Comparison
+
+The program implements three different student assignment algorithms:
+
+### Fill First (Type 0)
+- **Strategy**: Assigns students company-by-company, starting with the lowest-ranked companies
+- **Characteristics**: Tends to provide good overall satisfaction but may create uneven group distributions
+- **Best for**: Scenarios where ensuring every company gets good students is important
+
+### Rank First (Type 1) 
+- **Strategy**: Processes all rank-1 preferences first, then rank-2, etc., across all companies simultaneously
+- **Characteristics**: Prioritizes top preferences but may leave some students with poor assignments
+- **Best for**: Maximizing the number of students who get their top choices
+
+### Best First (Type 2)
+- **Strategy**: Iteratively finds the best available student-company match across all companies
+- **Characteristics**: Most computationally complex, aims for optimal overall assignment
+- **Best for**: Balancing individual satisfaction with overall optimization
+
+-----
 
 -----
 
