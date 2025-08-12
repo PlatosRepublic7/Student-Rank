@@ -13,6 +13,7 @@ __pycache__/
 # Results and output files (but keep test data in /data folder)
 /results/
 algorithm_statistics.csv
+algorithm_statistics_input_summary.csv
 test_executable.csv
 enhanced_stats_test.csv
 quick_analysis.csv

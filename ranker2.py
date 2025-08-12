@@ -72,8 +72,9 @@ def generate_synthetic_data(num_students: int, num_companies: int) -> pd.DataFra
         # Randomly select which companies this student will rank
         ranked_company_indices = np.random.choice(num_companies, size=num_to_rank, replace=False)
         
-        # Assign rankings 1 through num_to_rank to the selected companies
-        rankings[student_idx, ranked_company_indices] = np.arange(1, num_to_rank + 1)
+        # Assign RANDOM rankings 1 through num_to_rank to the selected companies
+        random_rankings = np.random.permutation(np.arange(1, num_to_rank + 1))
+        rankings[student_idx, ranked_company_indices] = random_rankings
     
     # Create DataFrame with proper data types
     df = pd.DataFrame({'Student': student_names})
@@ -96,6 +97,132 @@ def generate_proposed_companies(df: pd.DataFrame) -> dict:
                          for i in range(len(student_names))}
     
     return proposed_companies
+
+
+def save_trial_input_data(main_df: pd.DataFrame, proposed_companies: dict, ranked_companies_df: pd.DataFrame, trial_num: int, args) -> dict:
+    """Collect key input data metrics for a trial - returns summary data instead of saving files"""
+    
+    # Calculate key input metrics
+    company_columns = [col for col in main_df.columns if col != 'Student']
+    
+    # Company-centric statistical analysis - how students rank each company
+    company_ranking_stats = []
+    company_names = []
+    
+    for col in company_columns:
+        company_rankings = main_df[col].dropna()
+        # Only include actual rankings (1-5), exclude unranked companies (6)
+        actual_rankings = company_rankings[company_rankings <= 5]
+        
+        if len(actual_rankings) > 0:
+            company_ranking_stats.append(actual_rankings.values)
+            company_names.append(col)
+    
+    # Calculate statistics across companies (not students)
+    company_means = np.array([np.mean(rankings) for rankings in company_ranking_stats])
+    company_stds = np.array([np.std(rankings) for rankings in company_ranking_stats])
+    
+    # Company-level statistical measures
+    # 1. Mean of company averages (how popular companies are on average)
+    avg_company_ranking = float(np.mean(company_means))
+    
+    # 2. Standard deviation of company averages (variation in company popularity)
+    company_popularity_std = float(np.std(company_means))
+    
+    # 3. Skewness of company average rankings (are most companies popular or unpopular?)
+    if len(company_means) > 2 and company_popularity_std > 0:
+        mean_pop = np.mean(company_means)
+        company_skewness = float(np.mean(((company_means - mean_pop) / company_popularity_std) ** 3))
+    else:
+        company_skewness = 0.0
+    
+    # 4. Kurtosis of company average rankings (tail heaviness in company popularity)
+    if len(company_means) > 2 and company_popularity_std > 0:
+        company_kurtosis = float(np.mean(((company_means - mean_pop) / company_popularity_std) ** 4) - 3)
+    else:
+        company_kurtosis = 0.0
+    
+    # 5. Shannon Entropy of company popularity distribution
+    # Bin company averages into discrete categories for entropy calculation
+    if len(company_means) > 1:
+        # Create bins for company average rankings (1.0-1.5, 1.5-2.0, etc.)
+        bins = np.arange(1.0, 6.0, 0.5)
+        hist, _ = np.histogram(company_means, bins=bins)
+        hist = hist[hist > 0]  # Remove empty bins
+        if len(hist) > 0:
+            probabilities = hist / np.sum(hist)
+            company_entropy = float(-np.sum(probabilities * np.log2(probabilities)))
+        else:
+            company_entropy = 0.0
+    else:
+        company_entropy = 0.0
+    
+    # 6. Company outlier detection (companies with unusual average rankings)
+    if len(company_means) > 2:
+        q1_comp = np.percentile(company_means, 25)
+        q3_comp = np.percentile(company_means, 75)
+        iqr_comp = q3_comp - q1_comp
+        lower_bound_comp = q1_comp - 1.5 * iqr_comp
+        upper_bound_comp = q3_comp + 1.5 * iqr_comp
+        outlier_companies = company_means[(company_means < lower_bound_comp) | (company_means > upper_bound_comp)]
+        company_outlier_count = len(outlier_companies)
+        company_outlier_percentage = (company_outlier_count / len(company_means)) * 100 if len(company_means) > 0 else 0
+    else:
+        company_outlier_count = 0
+        company_outlier_percentage = 0.0
+    
+    # Additional company insights
+    best_company_avg = float(np.min(company_means)) if len(company_means) > 0 else 0.0
+    worst_company_avg = float(np.max(company_means)) if len(company_means) > 0 else 0.0
+    company_avg_range = worst_company_avg - best_company_avg
+    
+    # Company distribution statistics
+    company_stats = ranked_companies_df.head(3)  # Top 3 companies
+    
+    # Company inclusion analysis (how many students included each company in their preferences)
+    inclusion_counts = {}
+    for company in proposed_companies.values():
+        inclusion_counts[company] = inclusion_counts.get(company, 0) + 1
+    
+    most_included_company = max(inclusion_counts, key=inclusion_counts.get)
+    most_included_count = inclusion_counts[most_included_company]
+    
+    # Return summary metrics with company-centric statistics
+    input_summary = {
+        'trial': trial_num,
+        'total_students': len(main_df),
+        'total_companies': len(company_columns),
+        'companies_ranked': len(company_names),  # Number of companies that received rankings
+        
+        # Company-centric statistics
+        'avg_company_ranking': avg_company_ranking,  # Average ranking across all companies
+        'company_popularity_std': company_popularity_std,  # Variation in company popularity
+        'company_ranking_skewness': company_skewness,  # Distribution shape of company averages
+        'company_ranking_kurtosis': company_kurtosis,  # Tail heaviness of company popularity
+        'company_entropy': company_entropy,  # Diversity in company popularity distribution
+        'company_outlier_count': company_outlier_count,  # Number of unusually ranked companies
+        'company_outlier_percentage': float(company_outlier_percentage),  # Percentage of outlier companies
+        'best_company_avg_ranking': best_company_avg,  # Best company's average ranking
+        'worst_company_avg_ranking': worst_company_avg,  # Worst company's average ranking
+        'company_ranking_range': company_avg_range,  # Range of company average rankings
+        
+        # Company performance from composite scoring
+        'top_company': company_stats.iloc[0]['Company'],
+        'top_company_score': float(company_stats.iloc[0]['Composite Score']),
+        'second_company': company_stats.iloc[1]['Company'],
+        'second_company_score': float(company_stats.iloc[1]['Composite Score']),
+        'third_company': company_stats.iloc[2]['Company'],
+        'third_company_score': float(company_stats.iloc[2]['Composite Score']),
+        'most_included_company': most_included_company,
+        'most_included_count': most_included_count,
+        'company_score_range': float(company_stats.iloc[0]['Composite Score'] - company_stats.iloc[-1]['Composite Score']),
+        
+        # Basic assignment counts
+        'total_rankings_given': sum(len(rankings) for rankings in company_ranking_stats),
+        'total_unranked_assignments': len(main_df) * len(company_columns) - sum(len(rankings) for rankings in company_ranking_stats)
+    }
+    
+    return input_summary
 
 
 def collect_algorithm_statistics(student_groups_df: pd.DataFrame, num_students: int, num_companies: int, algorithm_name: str) -> dict:
@@ -131,9 +258,14 @@ def collect_algorithm_statistics(student_groups_df: pd.DataFrame, num_students: 
             rank_data_dict[f'students_got_choice_{rank}_count'] = int(rank_counts[rank-1])
             rank_data_dict[f'students_got_choice_{rank}_percent'] = (rank_counts[rank-1] / total_assignments * 100)
         
-        # Satisfaction rate (ranks 1-3)
-        satisfied_students = np.sum(rank_counts[:3])
-        satisfaction_rate = (satisfied_students / total_assignments * 100)
+        # Satisfaction rates for different thresholds
+        satisfied_students_top3 = np.sum(rank_counts[:3])  # Ranks 1-3
+        satisfied_students_top4 = np.sum(rank_counts[:4])  # Ranks 1-4
+        satisfied_students_top5 = np.sum(rank_counts[:5])  # Ranks 1-5
+        
+        satisfaction_rate_top3 = (satisfied_students_top3 / total_assignments * 100)
+        satisfaction_rate_top4 = (satisfied_students_top4 / total_assignments * 100)
+        satisfaction_rate_top5 = (satisfied_students_top5 / total_assignments * 100)
         
         # Additional statistical measures
         std_ranking = np.std(ranks_array)
@@ -147,7 +279,9 @@ def collect_algorithm_statistics(student_groups_df: pd.DataFrame, num_students: 
         for rank in range(1, 7):
             rank_data_dict[f'students_got_choice_{rank}_count'] = 0
             rank_data_dict[f'students_got_choice_{rank}_percent'] = 0
-        satisfaction_rate = 0
+        satisfaction_rate_top3 = 0
+        satisfaction_rate_top4 = 0
+        satisfaction_rate_top5 = 0
         std_ranking = 0
         median_ranking = 0
         iqr = 0
@@ -158,7 +292,9 @@ def collect_algorithm_statistics(student_groups_df: pd.DataFrame, num_students: 
         'std_student_ranking': std_ranking,
         'median_student_ranking': median_ranking,
         'iqr_student_ranking': iqr,
-        'student_satisfaction_percent': satisfaction_rate,
+        'student_satisfaction_percent': satisfaction_rate_top3,  # Keep original name for backward compatibility
+        'student_satisfaction_top4_percent': satisfaction_rate_top4,
+        'student_satisfaction_top5_percent': satisfaction_rate_top5,
         **rank_data_dict
     }
 
@@ -640,7 +776,12 @@ def main():
     # Trial configuration
     parser.add_argument("--trials", type=int, default=1, help="Number of trials to run (default: 1, max: 1000)")
     parser.add_argument("--students", type=int, default=30, help="Number of students per trial (default: 30)")
-    parser.add_argument("--companies", type=int, default=10, help="Number of companies per trial (default: 10)")
+    
+    # Company configuration
+    parser.add_argument("--total_companies", type=int, default=20, 
+                       help="Total companies in pool for ranking (default: 20)")
+    parser.add_argument("--selected_companies", type=int, default=10,
+                       help="Number of top companies selected for assignment (default: 10)")
     
     # Algorithm selection
     parser.add_argument("--algorithms", nargs='+', type=int, choices=[0, 1, 2], default=[0, 1, 2], 
@@ -649,6 +790,10 @@ def main():
     # Output configuration
     parser.add_argument("--output_file", type=str, default="algorithm_statistics.csv", 
                        help="Output CSV file name (default: algorithm_statistics.csv)")
+    parser.add_argument("--save_input_data", action="store_true", 
+                       help="Save generated input data to CSV files for inspection")
+    parser.add_argument("--seed", type=int, default=None, 
+                       help="Random seed for reproducible results (default: time-based)")
     parser.add_argument("--suppress_terminal_output", action="store_true", 
                        help="Suppress detailed terminal output during trials")
     parser.add_argument("--no_progress_bar", action="store_true", 
@@ -657,6 +802,28 @@ def main():
                        help="Show progress every N trials (default: 10)")
     
     args = parser.parse_args()
+    
+    # Validate company parameters
+    if args.selected_companies > args.total_companies:
+        return print(f"Error: selected_companies ({args.selected_companies}) cannot exceed total_companies ({args.total_companies})")
+    
+    if args.selected_companies < 1:
+        return print("Error: selected_companies must be at least 1")
+    
+    if args.total_companies < 1:
+        return print("Error: total_companies must be at least 1")
+    
+    # Set random seeds after parsing arguments
+    if args.seed is not None:
+        seed = args.seed
+        print(f"Using user-specified random seed: {seed}")
+    else:
+        import time
+        seed = int(time.time()) % 2**32  # Time-based seed for varied data across runs
+        print(f"Using time-based random seed: {seed}")
+    
+    np.random.seed(seed)
+    random.seed(seed)
     
     # Validate arguments
     if args.trials > 1000:
@@ -671,12 +838,15 @@ def main():
 
 def run_trial_mode(args):
     """Run multiple trials with synthetic data and collect statistics - OPTIMIZED"""
-    print(f"{Colors.OKBLUE}Running {args.trials} trial(s) with {args.students} students and {args.companies} companies (OPTIMIZED){Colors.ENDC}")
+    print(f"{Colors.OKBLUE}Running {args.trials} trial(s) with {args.students} students{Colors.ENDC}")
+    print(f"Company pool: {args.total_companies} total → {args.selected_companies} selected for assignment")
+    print(f"Selection rate: {args.selected_companies/args.total_companies*100:.1f}% (competitive selection)")
     print(f"Algorithms to test: {[['Fill First', 'Rank First', 'Best First'][alg] for alg in args.algorithms]}")
     print(f"Output file: {args.output_file}")
     print()
     
     all_results = []
+    input_summaries = []  # Collect input data summaries
     algorithm_functions = {
         0: ('Fill First', get_student_groups),
         1: ('Rank First', get_rank_first_student_groups), 
@@ -697,7 +867,7 @@ def run_trial_mode(args):
             print(f"{Colors.OKCYAN}Completed {trial + 1}/{args.trials} trials{Colors.ENDC}")
         
         # Generate synthetic data for this trial using optimized function
-        main_df = generate_synthetic_data(args.students, args.companies)
+        main_df = generate_synthetic_data(args.students, args.total_companies)
         proposed_companies = generate_proposed_companies(main_df)
         
         # Run company ranking and selection using optimized functions
@@ -707,8 +877,13 @@ def run_trial_mode(args):
             ascending=[False, False, False, False, False]
         ).reset_index(drop=True)
         
+        # Collect input data summary if requested
+        if args.save_input_data:
+            input_summary = save_trial_input_data(main_df, proposed_companies, ranked_companies_df, trial + 1, args)
+            input_summaries.append(input_summary)
+        
         # Select top companies using optimized function
-        top_companies = get_top_companies(ranked_companies_df, args.companies)
+        top_companies = get_top_companies(ranked_companies_df, args.selected_companies)
         
         # Filter to selected companies
         filtered_df = ranked_companies_df[ranked_companies_df['Company'].isin(top_companies)].reset_index(drop=True)
@@ -732,7 +907,7 @@ def run_trial_mode(args):
             )
             
             # Collect statistics using optimized function
-            stats = collect_algorithm_statistics(student_groups_df, args.students, args.companies, algorithm_name)
+            stats = collect_algorithm_statistics(student_groups_df, args.students, args.selected_companies, algorithm_name)
             
             # Add algorithm-specific prefix to column names with descriptive prefixes
             alg_prefix = ['fill_first', 'rank_first', 'best_first'][algorithm_id]
@@ -745,6 +920,13 @@ def run_trial_mode(args):
     # Create results DataFrame and save
     results_df = pd.DataFrame(all_results)
     results_df.to_csv(args.output_file, index=False)
+    
+    # Save input data summaries if requested
+    if args.save_input_data and input_summaries:
+        input_file = args.output_file.replace('.csv', '_input_summary.csv')
+        input_df = pd.DataFrame(input_summaries)
+        input_df.to_csv(input_file, index=False)
+        print(f"{Colors.OKGREEN}Input data summary saved to {input_file}{Colors.ENDC}")
     
     print(f"\n{Colors.OKGREEN}Completed all {args.trials} trials!{Colors.ENDC}")
     print(f"Results saved to {args.output_file}")
@@ -760,16 +942,24 @@ def run_trial_mode(args):
             
             mean_col = f'{alg_prefix}_avg_student_ranking'
             satisfaction_col = f'{alg_prefix}_student_satisfaction_percent'
+            satisfaction_top4_col = f'{alg_prefix}_student_satisfaction_top4_percent'
+            satisfaction_top5_col = f'{alg_prefix}_student_satisfaction_top5_percent'
             
             if mean_col in results_df.columns:
                 mean_avg = results_df[mean_col].mean()
                 mean_std = results_df[mean_col].std()
                 satisfaction_avg = results_df[satisfaction_col].mean()
                 satisfaction_std = results_df[satisfaction_col].std()
+                satisfaction_top4_avg = results_df[satisfaction_top4_col].mean()
+                satisfaction_top4_std = results_df[satisfaction_top4_col].std()
+                satisfaction_top5_avg = results_df[satisfaction_top5_col].mean()
+                satisfaction_top5_std = results_df[satisfaction_top5_col].std()
                 
                 print(f"\n{Colors.WARNING}{alg_name}:{Colors.ENDC}")
                 print(f"  Average Student Ranking: {mean_avg:.3f} ± {mean_std:.3f}")
-                print(f"  Student Satisfaction: {satisfaction_avg:.1f}% ± {satisfaction_std:.1f}%")
+                print(f"  Student Satisfaction (Top-3): {satisfaction_avg:.1f}% ± {satisfaction_std:.1f}%")
+                print(f"  Student Satisfaction (Top-4): {satisfaction_top4_avg:.1f}% ± {satisfaction_top4_std:.1f}%")
+                print(f"  Student Satisfaction (Top-5): {satisfaction_top5_avg:.1f}% ± {satisfaction_top5_std:.1f}%")
 
 
 if __name__ == '__main__':

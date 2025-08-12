@@ -19,8 +19,8 @@ The Student-Rank system addresses the complex problem of fairly assigning studen
 # Install dependencies
 pip install -r requirements.txt
 
-# Run statistical comparison of all algorithms
-python ranker2.py --trials 100 --students 50 --companies 10
+# Run statistical comparison of all algorithms (20 companies, select top 10)
+python ranker2.py --trials 100 --students 50 --total_companies 20 --selected_companies 10
 
 # Generate standalone executable
 pyinstaller --onefile --name StudentRanker ranker2.py
@@ -29,7 +29,8 @@ pyinstaller --onefile --name StudentRanker ranker2.py
 ### For Non-Technical Users
 Use the pre-built `StudentRanker.exe` executable:
 ```bash
-StudentRanker.exe --trials 50 --students 30 --companies 8
+# 50% selection rate - balanced competition
+StudentRanker.exe --trials 50 --students 30 --total_companies 16 --selected_companies 8
 ```
 
 ## 📋 Requirements
@@ -189,34 +190,71 @@ The main functionality generates synthetic data and performs statistical compari
 #### Core Arguments:
 - `--trials` **(Optional, default=1)** - Number of trials (max: 1000)
 - `--students` **(Optional, default=30)** - Students per trial  
-- `--companies` **(Optional, default=10)** - Companies per trial
+- `--total_companies` **(Optional, default=20)** - Total companies in ranking pool
+- `--selected_companies` **(Optional, default=10)** - Top companies selected for assignment
 - `--algorithms` **(Optional, default=all)** - Algorithm selection:
   - `0`: Fill First (`ff`)
   - `1`: Rank First (`rf`)
   - `2`: Best First (`bf`)
   - Multiple: `--algorithms 0 2` for Fill First + Best First only
 - `--output_file` **(Optional, default="algorithm_statistics.csv")** - Output filename
+- `--save_input_data` **(Optional)** - Save input statistics for analysis
 - `--no_progress_bar` **(Optional)** - Disable progress indicators
 
 #### Advanced Arguments:
 - `--suppress_terminal_output` **(Optional)** - Minimize console output
 - `--progress_interval` **(Optional, default=10)** - Progress update frequency
+- `--seed` **(Optional)** - Random seed for reproducible results
+- `--no_progress_bar` **(Optional)** - Disable progress indicators completely
 
 #### Example Commands:
 
 ```bash
-# Standard comparison across all algorithms
-python ranker2.py --trials 100 --students 50 --companies 10
+# Standard comparison with 50% company selection (balanced competition)
+python ranker2.py --trials 100 --students 50 --total_companies 20 --selected_companies 10
 
-# Large-scale analysis with specific algorithms
-python ranker2.py --trials 500 --algorithms 0 2 --output_file "ff_vs_bf_analysis.csv"
+# High competition scenario - only 25% of companies get students
+python ranker2.py --trials 200 --students 30 --total_companies 40 --selected_companies 10
 
-# High-volume testing with progress tracking
-python ranker2.py --trials 1000 --students 100 --companies 15 --progress_interval 50
+# Large-scale analysis with specific algorithms and input data collection
+python ranker2.py --trials 500 --algorithms 0 2 --save_input_data --output_file "ff_vs_bf_analysis.csv"
+
+# Low competition research scenario - 75% selection rate
+python ranker2.py --trials 100 --students 60 --total_companies 16 --selected_companies 12
 
 # Executable version (same arguments)
-./dist/StudentRanker.exe --trials 50 --students 25 --companies 8
+./dist/StudentRanker.exe --trials 50 --students 25 --total_companies 20 --selected_companies 8
 ```
+
+### 🏢 Company Selection Architecture
+
+The program uses a **two-stage company system** that models realistic competitive scenarios:
+
+#### **Stage 1: Company Pool Generation**
+- `--total_companies` defines the **full universe** of companies
+- All companies receive student preference rankings
+- Larger pools create more realistic preference distributions
+- **Default: 20 companies** (provides good statistical diversity)
+
+#### **Stage 2: Competitive Selection**
+- `--selected_companies` determines how many **top companies** get students
+- Only highest-ranked companies participate in assignments
+- Creates competitive pressure and meaningful rankings
+- **Default: 10 companies** (50% selection rate)
+
+#### **Selection Rate Impact:**
+```bash
+# High Competition (20% selection) - Only elite companies get students
+--total_companies 50 --selected_companies 10
+
+# Balanced Competition (50% selection) - Moderate competitive pressure  
+--total_companies 20 --selected_companies 10
+
+# Low Competition (80% selection) - Most companies get students
+--total_companies 15 --selected_companies 12
+```
+
+**Research Insight:** Different selection rates reveal how algorithms perform under varying competitive pressures, making this ideal for studying algorithm robustness and fairness.
 
 #### Performance Characteristics:
 - **Optimized Execution:** 3.5-9.7x speedup through vectorized operations
@@ -232,7 +270,6 @@ For processing existing CSV files with student preference data.
 - `--file` **(Required)** - Path to input CSV file
 - `--type` **(Required)** - Algorithm selection (0, 1, or 2)
 - `--students` **(Optional)** - Number of students to process
-- `--companies` **(Optional, default=10)** - Number of companies
 - `--suppress_terminal_output` **(Optional)** - Minimize output
 
 #### Legacy Example:
@@ -367,13 +404,44 @@ ff_rank_1_count,ff_rank_1_pct,ff_rank_2_count,ff_rank_2_pct,...
 ```
 
 **Column Definitions:**
-- `{alg}_mean_ranking` - Average rank assigned to students
-- `{alg}_std_dev` - Standard deviation of rankings  
-- `{alg}_satisfaction_rate` - Percentage receiving ranks 1-3
-- `{alg}_median` - Median ranking value
-- `{alg}_iqr` - Interquartile range (Q3-Q1)
-- `{alg}_rank_N_count` - Raw count of students receiving rank N
-- `{alg}_rank_N_pct` - Percentage of students receiving rank N
+- `{alg}_avg_student_ranking` - Average rank assigned to students
+- `{alg}_std_student_ranking` - Standard deviation of rankings  
+- `{alg}_student_satisfaction_percent` - Percentage receiving ranks 1-3 (top-3 satisfaction)
+- `{alg}_student_satisfaction_top4_percent` - Percentage receiving ranks 1-4 (top-4 satisfaction)
+- `{alg}_student_satisfaction_top5_percent` - Percentage receiving ranks 1-5 (top-5 satisfaction)
+- `{alg}_median_student_ranking` - Median ranking value
+- `{alg}_iqr_student_ranking` - Interquartile range (Q3-Q1)
+- `{alg}_students_got_choice_N_count` - Raw count of students receiving rank N
+- `{alg}_students_got_choice_N_percent` - Percentage of students receiving rank N
+
+**Satisfaction Metrics Progression:**
+The three satisfaction thresholds provide comprehensive preference analysis:
+- **Top-3 Satisfaction:** Traditional "satisfied" threshold (ranks 1-3)
+- **Top-4 Satisfaction:** Extended satisfaction including 4th preference
+- **Top-5 Satisfaction:** Near-complete satisfaction (all ranked preferences)
+
+This progression reveals algorithm performance across preference tiers and helps identify incremental satisfaction gains.
+
+#### Input Data Analysis (`algorithm_statistics_input_summary.csv`)
+When using `--save_input_data`, generates company-centric analysis:
+
+```csv
+trial,total_companies,companies_ranked,avg_company_ranking,company_popularity_std,
+company_ranking_skewness,company_ranking_kurtosis,company_entropy,
+company_outlier_count,best_company_avg_ranking,worst_company_avg_ranking,...
+```
+
+**Key Input Metrics:**
+- `total_companies` - Total companies in ranking pool
+- `companies_ranked` - Companies that received student rankings  
+- `avg_company_ranking` - Average ranking across all companies
+- `company_popularity_std` - Variation in company popularity
+- `company_ranking_skewness` - Distribution asymmetry in company preferences
+- `company_entropy` - Diversity measure of company popularity
+- `company_outlier_count` - Companies with unusual ranking patterns
+- `top_company` / `top_company_score` - Highest-ranked company details
+
+This data enables analysis of **input characteristics** vs. **algorithm performance** correlations.
 
 #### Legacy Mode Output (`ranker2data_{algorithm}.csv`)
 Student group assignments by company:
@@ -410,15 +478,18 @@ The system enables research into:
 ### Synthetic Data Generation Parameters
 
 #### Student Preference Modeling
-- **Ranking Distribution:** Uniform random selection of 5 companies to rank
-- **Preference Realism:** No duplicate rankings per student
+- **Company Pool Size:** Configurable via `--total_companies` (default: 20)
+- **Ranking Distribution:** Uniform random selection of 5 companies to rank per student
+- **Preference Realism:** No duplicate rankings per student (ranks 1-5 assigned uniquely)
 - **Company Proposal:** Random assignment of one proposed company per student
-- **Scale Testing:** Supports 1-1000 students, 1-1000 companies
+- **Selection Competition:** Top `--selected_companies` compete for student assignments
+- **Scale Testing:** Supports 1-1000 students, 1-1000 companies in pool
 
 #### Company Name Generation
 - **File-based:** Loads from `utilities/companies.txt`
 - **Faker Integration:** Generates realistic company names when file insufficient
 - **Uniqueness:** Ensures no duplicate company names in dataset
+- **Pool Management:** Efficiently handles large company pools for realistic competition
 
 ### Performance Tuning
 
