@@ -438,7 +438,11 @@ company_outlier_count,best_company_avg_ranking,worst_company_avg_ranking,...
 - `company_popularity_std` - Variation in company popularity
 - `company_ranking_skewness` - Distribution asymmetry in company preferences
 - `company_entropy` - Diversity measure of company popularity
-- `company_outlier_count` - Companies with unusual ranking patterns
+- `company_outlier_count` - Total companies with unusual ranking patterns
+- `highly_ranked_outlier_count` - Extremely popular companies (below Q1 - 1.5×IQR)
+- `highly_ranked_outlier_percentage` - Percentage of extremely popular companies
+- `lowly_ranked_outlier_count` - Extremely unpopular companies (above Q3 + 1.5×IQR)
+- `lowly_ranked_outlier_percentage` - Percentage of extremely unpopular companies
 - `top_company` / `top_company_score` - Highest-ranked company details
 
 This data enables analysis of **input characteristics** vs. **algorithm performance** correlations.

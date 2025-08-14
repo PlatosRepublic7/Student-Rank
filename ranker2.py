@@ -164,10 +164,25 @@ def save_trial_input_data(main_df: pd.DataFrame, proposed_companies: dict, ranke
         iqr_comp = q3_comp - q1_comp
         lower_bound_comp = q1_comp - 1.5 * iqr_comp
         upper_bound_comp = q3_comp + 1.5 * iqr_comp
-        outlier_companies = company_means[(company_means < lower_bound_comp) | (company_means > upper_bound_comp)]
-        company_outlier_count = len(outlier_companies)
+        
+        # Separate outlier detection for highly-ranked (popular) and lowly-ranked (unpopular) companies
+        highly_ranked_outliers = company_means[company_means < lower_bound_comp]  # Lower rankings = more popular
+        lowly_ranked_outliers = company_means[company_means > upper_bound_comp]   # Higher rankings = less popular
+        
+        highly_ranked_outlier_count = len(highly_ranked_outliers)
+        lowly_ranked_outlier_count = len(lowly_ranked_outliers)
+        
+        highly_ranked_outlier_percentage = (highly_ranked_outlier_count / len(company_means)) * 100 if len(company_means) > 0 else 0
+        lowly_ranked_outlier_percentage = (lowly_ranked_outlier_count / len(company_means)) * 100 if len(company_means) > 0 else 0
+        
+        # Keep legacy totals for backward compatibility
+        company_outlier_count = highly_ranked_outlier_count + lowly_ranked_outlier_count
         company_outlier_percentage = (company_outlier_count / len(company_means)) * 100 if len(company_means) > 0 else 0
     else:
+        highly_ranked_outlier_count = 0
+        lowly_ranked_outlier_count = 0
+        highly_ranked_outlier_percentage = 0.0
+        lowly_ranked_outlier_percentage = 0.0
         company_outlier_count = 0
         company_outlier_percentage = 0.0
     
@@ -200,8 +215,12 @@ def save_trial_input_data(main_df: pd.DataFrame, proposed_companies: dict, ranke
         'company_ranking_skewness': company_skewness,  # Distribution shape of company averages
         'company_ranking_kurtosis': company_kurtosis,  # Tail heaviness of company popularity
         'company_entropy': company_entropy,  # Diversity in company popularity distribution
-        'company_outlier_count': company_outlier_count,  # Number of unusually ranked companies
-        'company_outlier_percentage': float(company_outlier_percentage),  # Percentage of outlier companies
+        'company_outlier_count': company_outlier_count,  # Number of unusually ranked companies (total)
+        'company_outlier_percentage': float(company_outlier_percentage),  # Percentage of outlier companies (total)
+        'highly_ranked_outlier_count': highly_ranked_outlier_count,  # Number of extremely popular companies
+        'highly_ranked_outlier_percentage': float(highly_ranked_outlier_percentage),  # Percentage of extremely popular companies
+        'lowly_ranked_outlier_count': lowly_ranked_outlier_count,  # Number of extremely unpopular companies
+        'lowly_ranked_outlier_percentage': float(lowly_ranked_outlier_percentage),  # Percentage of extremely unpopular companies
         'best_company_avg_ranking': best_company_avg,  # Best company's average ranking
         'worst_company_avg_ranking': worst_company_avg,  # Worst company's average ranking
         'company_ranking_range': company_avg_range,  # Range of company average rankings
